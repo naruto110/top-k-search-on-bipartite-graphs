@@ -20,11 +20,11 @@ vector<string> task_path;
 
 void set_path(vector<string>& in_path_U, vector<string>& in_path_V, vector<string>& task_path)
 {
-	in_path_U.push_back("./data/demoU.txt");  // 0: demo
-	in_path_V.push_back("./data/demoV.txt");
+	//in_path_U.push_back("./data/demoU.txt");  // 0: demo
+	//in_path_V.push_back("./data/demoV.txt");
 
-	//in_path_U.push_back("./data/case/caseU.txt");  // 1: demo
-	//in_path_V.push_back("./data/case/caseV.txt");
+	in_path_U.push_back("./data/case/caseU.txt");  // 0£ºcase
+	in_path_V.push_back("./data/case/caseV.txt");
 
 	in_path_U.push_back("../../data/dblp-author/dblp-authorU.txt");  // 1: dblp  ok  8191, 3090144
 	in_path_V.push_back("../../data/dblp-author/dblp-authorV.txt");
@@ -311,8 +311,8 @@ int main(int argc, char* argv[])
 
 
 #ifdef _WIN32
-	string in_pathU = in_path_U[1];
-	string in_pathV = in_path_V[1];
+	string in_pathU = in_path_U[0];
+	string in_pathV = in_path_V[0];
 #else
 	string in_pathU = in_path_U[atoi(argv[1])];
 	string in_pathV = in_path_V[atoi(argv[1])];
@@ -321,9 +321,9 @@ int main(int argc, char* argv[])
 	param.input_pathU = in_pathU;
 	param.input_pathV = in_pathV;
 #ifdef _WIN32
-	param.k = 2;
+	param.k = 10;
 	global_dynamic_ctr = 0;
-	global_priority_ctr = 0;
+//	global_priority_ctr = 1;
 	global_total_threads = 1;
 #else
 	global_total_threads = atoi(argv[3]);
@@ -433,8 +433,8 @@ int main(int argc, char* argv[])
 #else
 	ResetTimer(WORKER_TIMER);
 #endif
-//	vector<Edge*> result_vec = top_k_edges_cal(param, graph, global_edge_vec);  // used to compare the time cost of ego generate and betweenness calculate
-	vector<Edge*> result_vec = top_k_edges_cal_parallel(param, graph, global_edge_vec);
+	vector<Edge*> result_vec = top_k_edges_cal(param, graph, global_edge_vec);  // used to compare the time cost of ego generate and betweenness calculate
+//	vector<Edge*> result_vec = top_k_edges_cal_parallel(param, graph, global_edge_vec);
 	
 #ifdef _WIN32
 #else

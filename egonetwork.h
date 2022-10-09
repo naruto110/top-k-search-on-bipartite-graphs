@@ -18,7 +18,9 @@ public:
 	//typedef hash_map<size_v, size_v> BetweenMap;  // induced neighbors
 	//typedef typename BetweenMap::iterator BetweenIter;
 
+	//typedef hash_map<size_v, size_v> BetweenMap;  // induced neighbors
 	typedef flat_hash_map<size_v, size_v> BetweenMap;  // induced neighbors
+
 	//typedef typename BetweenMap::iterator BetweenIter;
 
 	//typedef oneapi::tbb::concurrent_hash_map<size_v, size_v> BetweenMap;
@@ -191,77 +193,68 @@ public:
 
 	size_b cal_egobetweenness_opt(Graph graph)
 	{
-	#ifdef _WIN32
-	#else
-			ResetTimer(BETCAL_TIMER);
-	#endif
+#ifdef _WIN32
+#else
+		ResetTimer(BETCAL_TIMER);
+#endif
 		if (uset.size() < vset.size())// start from vset  opt: <  baseline: >
 		{
-			BetweenMap bMap;
-			for (size_v uidx = 0; uidx < uset.size(); uidx++)
-			{
-				bMap[uset[uidx]] = 0;
-			}
-			vector<BetweenMap> mapVec(global_total_threads+1, bMap);
-		//#pragma omp parallel for num_threads(global_total_threads)
-		#pragma omp parallel for num_threads(1)
-			//omp_get_thread_num();
+			#pragma omp parallel for num_threads(global_total_threads)
+			//	#pragma omp parallel for num_threads(1)
 			for (size_v vidx = 0; vidx < vset.size(); vidx++)
 			{
-				int thread_id = omp_get_thread_num();
-				//cout << "omp_get_thread_num: " << thread_id << endl;
+				//cout << omp_get_thread_num() << " to " << vidx << endl;
 				size_v tmpvid = vset[vidx];
-				//vector<size_v> v_nbs = ego_map_v[tmpvid];
+				vector<size_v> v_nbs = ego_map_v[tmpvid];
 
 				size_b maxBetweenness = uset.size();
-			//	BetweenMap bMap = mapVec[thread_id];
-				//concurrent_vector<int> v;
-				//bMap1[1] = 1;
-
-				//vector<size_v> bMap(max_uid + 1, 0);
-				//int* bMap = (int*)malloc((max_uid + 1) * sizeof(size_v));
+				BetweenMap bMap;
 
 				for (size_v uidx = 0; uidx < uset.size(); uidx++)
 				{
-					//bMap[uset[uidx]] = 0;
-					mapVec[thread_id][uset[uidx]] = 0;
+					bMap[uset[uidx]] = 0;
 				}
-				for (size_v nbidx = 0; nbidx < ego_map_v[tmpvid].size(); nbidx++)
+				for (size_v nbidx = 0; nbidx < v_nbs.size(); nbidx++)
 				{
-					mapVec[thread_id][ego_map_v[tmpvid][nbidx]] = -1;
+					bMap[v_nbs[nbidx]] = -1; // in the end, plus 1 to maxBetweenness, for the original edge
 				}
 
 				//#pragma omp parallel for
-				for (size_v nbidx = 0; nbidx < ego_map_v[tmpvid].size(); nbidx++)
+				for (size_v nbidx = 0; nbidx < v_nbs.size(); nbidx++)
 				{
-					size_v _1hop_nei = ego_map_v[tmpvid][nbidx];  // u
-					//vector<size_v> _2hop_nbs_vec = ego_map_u[_1hop_nei];
-					for (size_v _2hop_idx = 0; _2hop_idx < ego_map_u[_1hop_nei].size(); _2hop_idx++)
+					// test openmp
+				//	cout << omp_get_thread_num() << " to " << nbidx << endl;
+
+					size_v _1hop_nei = v_nbs[nbidx];  // u
+
+					vector<size_v> _2hop_nbs_vec = ego_map_u[_1hop_nei];
+					//#pragma omp parallel for
+					for (size_v _2hop_idx = 0; _2hop_idx < _2hop_nbs_vec.size(); _2hop_idx++)
 					{
-						size_v _2hop_nei = ego_map_u[_1hop_nei][_2hop_idx]; // v
+						size_v _2hop_nei = _2hop_nbs_vec[_2hop_idx]; // v
 
 						if (_2hop_nei == tmpvid)
 						{
 							continue;
 						}
 
-						//vector<size_v> _3hop_nbs_vec = ego_map_v[_2hop_nei];
+						vector<size_v> _3hop_nbs_vec = ego_map_v[_2hop_nei];
 						//#pragma omp parallel for
-						for (size_v _3hop_idx = 0; _3hop_idx < ego_map_v[_2hop_nei].size(); _3hop_idx++)
+						for (size_v _3hop_idx = 0; _3hop_idx < _3hop_nbs_vec.size(); _3hop_idx++)
 						{
-							size_v _3hop_nei = ego_map_v[_2hop_nei][_3hop_idx]; //u
+							size_v _3hop_nei = _3hop_nbs_vec[_3hop_idx]; //u
 
 							if (_3hop_nei == _1hop_nei)
 							{
 								continue;
 							}
 
-							if (mapVec[thread_id][_3hop_nei] != -1)  //bMap
+							if (bMap[_3hop_nei] != -1)
 							{
-								size_v tmp_path_num = mapVec[thread_id][_3hop_nei];
+								size_v tmp_path_num = bMap[_3hop_nei];
 								tmp_path_num += 1;
 								//#pragma omp critical
-								mapVec[thread_id][_3hop_nei] = tmp_path_num;
+								bMap[_3hop_nei] = tmp_path_num;
 							}
 						}
 					}
@@ -269,100 +262,104 @@ public:
 
 				for (size_v uidx = 0; uidx < uset.size(); uidx++)
 				{
-					size_v tmpval = mapVec[thread_id][uset[uidx]];
-					if (mapVec[thread_id][uset[uidx]] == -1)
+					size_v tmpval = bMap[uset[uidx]];
+					if (bMap[uset[uidx]] == -1)
 					{
 						maxBetweenness -= 1.0;
 					}
 					else
 					{
-						if (mapVec[thread_id][uset[uidx]] <= 0)
+						if (bMap[uset[uidx]] <= 0)
 						{
 							cout << "error in vset processing !!!" << endl;
-							cout << "mapVec[thread_id][uset[uidx]]: " << mapVec[thread_id][uset[uidx]] << endl;
+							cout << "bMap[uset[uidx]]: " << bMap[uset[uidx]] << endl;
 							while (1)
 							{
 								;
 							}
 						}
-						size_b tmp_val = 1.0 - 1.0 / (size_b)mapVec[thread_id][uset[uidx]];
+						size_b tmp_val = 1.0 - 1.0 / (size_b)bMap[uset[uidx]];
 						maxBetweenness -= tmp_val;
 					}
 				}
 
 				//maxBetweenness += 1;
-			#pragma omp atomic
+#pragma omp atomic
 				betweenness += maxBetweenness;
 				//	cout << "contributer: " << uid << " donation: " << maxBetweenness << endl;
 
-				//free(bMap);
 			}
 			betweenness += 1;
 			//cout << "from vset" << endl;
 		}
 		else  // start from uset
 		{
-			BetweenMap bMap;
-			for (size_v vidx = 0; vidx < vset.size(); vidx++)
-			{
-				bMap[vset[vidx]] = 0;
-			}
-			vector<BetweenMap> mapVec(global_total_threads+1, bMap);
-			//mapVec[2][2] = 111;
-			//cout << "mapVec[3][2] " << mapVec[3][2] << endl;
-			//cout << "mapVec[2][2] " << mapVec[2][2] << endl;
-
-		//#pragma omp parallel for num_threads(global_total_threads)
-		#pragma omp parallel for num_threads(1)
+            #pragma omp parallel for num_threads(global_total_threads)
+			//	#pragma omp parallel for num_threads(1)
 			for (size_v uidx = 0; uidx < uset.size(); uidx++)
 			{
-				int thread_id = omp_get_thread_num();
-			//	cout << "omp_get_thread_num: " << thread_id << endl;
 				size_v tmpuid = uset[uidx];
-				//vector<size_v> u_nbs = ego_map_u[tmpuid];
+				vector<size_v> u_nbs = ego_map_u[tmpuid];
 
 				size_b maxBetweenness = vset.size();
-			//	BetweenMap bMap = mapVec[thread_id];
-				//vector<size_v> bMap(max_vid + 1, 0);
-				//int* bMap = (int*)malloc((max_uid + 1) * sizeof(size_v));
+				BetweenMap bMap;
 
 				for (size_v vidx = 0; vidx < vset.size(); vidx++)
 				{
-					mapVec[thread_id][vset[vidx]] = 0;
+					bMap[vset[vidx]] = 0;
 				}
-				for (size_v nbidx = 0; nbidx < ego_map_u[tmpuid].size(); nbidx++)
+				for (size_v nbidx = 0; nbidx < u_nbs.size(); nbidx++)
 				{
-					mapVec[thread_id][ego_map_u[tmpuid][nbidx]] = -1; // in the end, plus 1 to maxBetweenness, for the original edge
+					bMap[u_nbs[nbidx]] = -1; // in the end, plus 1 to maxBetweenness, for the original edge
+
+					// dynamic upper bound update
+					if (global_dynamic_ctr == 1)
+					{
+						if (tmpuid != uid && u_nbs[nbidx] != vid)
+						{
+							EdgeIdx eidx;
+							eidx.src = tmpuid;
+							eidx.des = u_nbs[nbidx];
+							Edge* tmpedge = global_edge_map[eidx];
+							if (tmpedge->processed == 0 && tmpedge->global_idx < global_idx + 100)  // unprocessed
+							{
+								tmpedge->ex_edge_num += 1;
+								tmpedge->set_up_bound();
+								update_edge_map(global_edge_vec, tmpedge);
+							}
+						}
+					}
 				}
 
-				for (size_v nbidx = 0; nbidx < ego_map_u[tmpuid].size(); nbidx++)
+				for (size_v nbidx = 0; nbidx < u_nbs.size(); nbidx++)
 				{
-					size_v _1hop_nei = ego_map_u[tmpuid][nbidx];  // v
-					//vector<size_v> _2hop_nbs_vec = ego_map_v[_1hop_nei];
-					for (size_v _2hop_idx = 0; _2hop_idx < ego_map_v[_1hop_nei].size(); _2hop_idx++)
+					size_v _1hop_nei = u_nbs[nbidx];  // v
+					vector<size_v> _2hop_nbs_vec = ego_map_v[_1hop_nei];
+					//#pragma omp parallel for
+					for (size_v _2hop_idx = 0; _2hop_idx < _2hop_nbs_vec.size(); _2hop_idx++)
 					{
-						size_v _2hop_nei = ego_map_v[_1hop_nei][_2hop_idx]; // u
+						size_v _2hop_nei = _2hop_nbs_vec[_2hop_idx]; // u
 
 						if (_2hop_nei == tmpuid)
 						{
 							continue;
 						}
 
-						//vector<size_v> _3hop_nbs_vec = ego_map_u[_2hop_nei];
-						for (size_v _3hop_idx = 0; _3hop_idx < ego_map_u[_2hop_nei].size(); _3hop_idx++)
+						vector<size_v> _3hop_nbs_vec = ego_map_u[_2hop_nei];
+						for (size_v _3hop_idx = 0; _3hop_idx < _3hop_nbs_vec.size(); _3hop_idx++)
 						{
-							size_v _3hop_nei = ego_map_u[_2hop_nei][_3hop_idx]; //v
+							size_v _3hop_nei = _3hop_nbs_vec[_3hop_idx]; //v
 
 							if (_3hop_nei == _1hop_nei)
 							{
 								continue;
 							}
 
-							if (mapVec[thread_id][_3hop_nei] != -1)
+							if (bMap[_3hop_nei] != -1)
 							{
-								size_v tmp_path_num = mapVec[thread_id][_3hop_nei];
+								size_v tmp_path_num = bMap[_3hop_nei];
 								tmp_path_num += 1;
-								mapVec[thread_id][_3hop_nei] = tmp_path_num;
+								bMap[_3hop_nei] = tmp_path_num;
 							}
 						}
 					}
@@ -370,32 +367,31 @@ public:
 
 				for (size_v vidx = 0; vidx < vset.size(); vidx++)
 				{
-					if (mapVec[thread_id][vset[vidx]] == -1)
+					if (bMap[vset[vidx]] == -1)
 					{
 						maxBetweenness -= 1.0;
 					}
 					else
 					{
-						if (mapVec[thread_id][vset[vidx]] <= 0)
+						if (bMap[vset[vidx]] <= 0)
 						{
 							cout << "error in vset processing !!!" << endl;
-							cout << "mapVec[thread_id][vset[vidx]]: " << mapVec[thread_id][vset[vidx]] << endl;
+							cout << "bMap[vset[vidx]]: " << bMap[vset[vidx]] << endl;
 							while (1)
 							{
 								;
 							}
 						}
 
-						size_b tmp_val = 1.0 - 1.0 / (size_b)mapVec[thread_id][vset[vidx]];
+						size_b tmp_val = 1.0 - 1.0 / (size_b)bMap[vset[vidx]];
 						maxBetweenness -= tmp_val;
 					}
 				}
 
 				//maxBetweenness += 1;
-			#pragma omp atomic
+#pragma omp atomic
 				betweenness += maxBetweenness;
 				//	cout << "contributer: " << uid << " donation: " << maxBetweenness << endl;
-				//free(bMap);
 			}
 			betweenness += 1;
 			//cout << "from uset" << endl;
